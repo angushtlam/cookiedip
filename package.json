@@ -1,0 +1,19 @@
+{
+  "name": "cookiedip",
+  "version": "0.1.0",
+  "description": "Open source cookie identification inspired by tools used by privacy regulators.",
+  "bin": {
+    "cookiedip": "bin/cookiedip"
+  },
+  "main": "bin/cookiedip",
+  "scripts": {
+    "start": "node bin/cookiedip"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "prettier": "^3.0.0"
+  },
+  "dependencies": {
+    "puppeteer": "^25.1.0"
+  }
+}

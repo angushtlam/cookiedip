@@ -1,0 +1,123 @@
+#!/usr/bin/env node
+
+const puppeteer = require('puppeteer');
+const { printUsage, normalizeUrl, supportedTypes } = require('./utils');
+const collectBrowserStorage = require('./browserStorage');
+const setupNetworkMonitor = require('./networkMonitor');
+
+const DEFAULT_TIMEOUT_MS = 45000;
+
+// Parse the command-line arguments into URL, type, and help flags.
+// Supports positional URL and type, plus --help/-h options.
+function parseCommandLineArgs(args) {
+  const positionals = [];
+  const parsed = { help: false };
+
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i];
+
+    if (arg === '-h' || arg === '--help') {
+      parsed.help = true;
+    } else if (arg.startsWith('-')) {
+      throw new Error(`Unsupported option: ${arg}`);
+    } else {
+      positionals.push(arg);
+    }
+  }
+
+  if (positionals.length > 2) {
+    throw new Error(`Unexpected argument(s): ${positionals.slice(2).join(', ')}`);
+  }
+
+  parsed.url = positionals[0];
+  parsed.typeArg = positionals[1];
+  return parsed;
+}
+
+// Validate a single requested output type.
+function parseTypes(typeArg) {
+  const type = typeArg.trim();
+
+  if (type.includes(',')) {
+    throw new Error('Multiple types are not supported. Provide one type only.');
+  }
+
+  if (!supportedTypes.includes(type)) {
+    throw new Error(`Unsupported type: ${type}`);
+  }
+
+  return [type];
+}
+
+// Launch Puppeteer, navigate to the target URL, and collect browser storage data.
+async function run(url, types, timeoutMs) {
+  const browser = await puppeteer.launch({
+    headless: true,
+    args: ['--no-sandbox', '--disable-setuid-sandbox'],
+  });
+
+  const page = await browser.newPage();
+  await page.setDefaultNavigationTimeout(timeoutMs);
+
+  const networkData = setupNetworkMonitor(page);
+
+  try {
+    await page.goto(url, {
+      waitUntil: ['load', 'networkidle2'],
+      timeout: timeoutMs,
+    });
+
+    const results = {};
+
+    if (types.includes('browserStorage')) {
+      results.browserStorage = await collectBrowserStorage(page, networkData);
+    }
+
+    return results;
+  } finally {
+    await browser.close();
+  }
+}
+
+(async function main() {
+  const args = process.argv.slice(2);
+
+  let parsed;
+  try {
+    parsed = parseCommandLineArgs(args);
+  } catch (error) {
+    console.error('Error:', error.message);
+    printUsage();
+    process.exit(1);
+  }
+
+  if (parsed.help || args.length === 0) {
+    printUsage();
+    process.exit(0);
+  }
+
+  if (!parsed.url) {
+    console.error('Error: URL is required.');
+    printUsage();
+    process.exit(1);
+  }
+
+  let types;
+  try {
+    types = parseTypes(parsed.typeArg || 'browserStorage');
+  } catch (error) {
+    console.error('Error:', error.message);
+    printUsage();
+    process.exit(1);
+  }
+
+  const targetUrl = normalizeUrl(parsed.url);
+
+  try {
+    const result = await run(targetUrl, types, DEFAULT_TIMEOUT_MS);
+    console.log(JSON.stringify(result, null, 2));
+  } catch (error) {
+    console.error('Error:', error.message || error);
+    process.exit(1);
+  }
+})();
