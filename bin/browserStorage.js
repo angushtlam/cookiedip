@@ -1,7 +1,11 @@
 // Collects cookie and storage keys from all frame origins.
 // page: Puppeteer Page instance.
 // Returns an object keyed by frame origin URI, with each value containing cookie and storage evidence maps.
-async function collectBrowserStorage(page, networkData = null) {
+async function collectBrowserStorage(
+  page,
+  networkData = null,
+  { pollDelayMs = 1000, pollTimes = 5 } = {},
+) {
   const result = {};
 
   const createOriginResult = () => ({
@@ -119,10 +123,10 @@ async function collectBrowserStorage(page, networkData = null) {
   };
 
   const snapshots = [];
-  for (let i = 0; i < 5; i += 1) {
+  for (let i = 0; i < pollTimes; i += 1) {
     snapshots.push(await collectPollSnapshot());
-    if (i < 4) {
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+    if (i < pollTimes - 1) {
+      await new Promise((resolve) => setTimeout(resolve, pollDelayMs));
     }
   }
 

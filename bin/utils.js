@@ -1,8 +1,8 @@
 // Print CLI usage details for cookiedip.
 function printUsage() {
-  console.log('Usage: cookiedip <url> [type]');
-  console.log('type: browserStorage');
-  console.log('Defaults to browserStorage.');
+  console.log('Usage: cookiedip [--poll-delay <ms>] [--poll-times <count>] <url> [type]');
+  console.log('- type: browserStorage');
+  console.log('  - Polling defaults to 1000ms delay and 5 polls.');
 }
 
 // Normalize a raw URL string by ensuring it has a valid protocol and absolute form.
