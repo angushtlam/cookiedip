@@ -1,19 +1,52 @@
 {
   "name": "cookiedip",
-  "version": "0.1.0",
-  "description": "Open source cookie identification inspired by tools used by privacy regulators.",
+  "version": "1.0.0",
+  "description": "Reusable Puppeteer-based browser storage scanner for cookies, localStorage, and sessionStorage.",
+  "type": "module",
   "bin": {
-    "cookiedip": "bin/cookiedip"
+    "cookiedip": "bin/cookiedip.js"
   },
-  "main": "bin/cookiedip",
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "files": [
+    "bin/",
+    "src/",
+    "LICENSE",
+    "README.md",
+    "SECURITY.md",
+    "CONTRIBUTING.md"
+  ],
   "scripts": {
-    "start": "node bin/cookiedip"
+    "start": "node bin/cookiedip.js",
+    "test": "node --test"
+  },
+  "keywords": [
+    "cookies",
+    "browser-storage",
+    "privacy",
+    "puppeteer",
+    "scanner"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/angushtlam/cookiedip.git"
+  },
+  "bugs": {
+    "url": "https://github.com/angushtlam/cookiedip/issues"
+  },
+  "homepage": "https://github.com/angushtlam/cookiedip#readme",
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "license": "MIT",
-  "devDependencies": {
-    "prettier": "^3.0.0"
-  },
   "dependencies": {
     "puppeteer": "^25.1.0"
+  },
+  "devDependencies": {
+    "prettier": "^3.0.0"
   }
 }
