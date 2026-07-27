@@ -1,12 +1,12 @@
-import { fork } from "node:child_process";
-import { existsSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+import { fork } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
 export const DEFAULT_CAPTURE_WINDOW_MS = 5000;
 export const DEFAULT_NAVIGATION_TIMEOUT_MS = 50000;
 export const DEFAULT_SCAN_TIMEOUT_MS = 100000;
 export const DEFAULT_USER_AGENT =
-  "Mozilla/5.0 (compatible; Cookiedip/1.0; +https://github.com/angushtlam/cookiedip)";
+  'Mozilla/5.0 (compatible; Cookiedip/1.0; +https://github.com/angushtlam/cookiedip)';
 const DEFAULT_VIEWPORT = { width: 1365, height: 768 };
 const WORKER_TIMEOUT_GRACE_MS = 5000;
 const browserWorkers = new Map();
@@ -22,43 +22,35 @@ export function runBrowserStorageScanInWorker(submittedUrl, options = {}) {
   return sendBrowserWorkerRequest({
     workerKey,
     message: {
-      type: "cookiedip-browser-storage-scan-request",
+      type: 'cookiedip-browser-storage-scan-request',
       submittedUrl,
       normalizedUrl,
       options: workerOptions,
     },
     timeoutMs: scanTimeoutMs + WORKER_TIMEOUT_GRACE_MS,
     timeoutMessage: `Scan timed out after ${scanTimeoutMs}ms; browser worker was killed.`,
-    responseType: "cookiedip-browser-storage-scan-result",
+    responseType: 'cookiedip-browser-storage-scan-result',
   });
 }
 
 export function warmBrowserStorageWorker(options = {}) {
   const workerKey = browserWorkerKey(options);
-  const timeoutMs = Number(
-    options.timeoutMs || process.env.PUPPETEER_WARMUP_TIMEOUT_MS || 300000,
-  );
+  const timeoutMs = Number(options.timeoutMs || process.env.PUPPETEER_WARMUP_TIMEOUT_MS || 300000);
 
   return sendBrowserWorkerRequest({
     workerKey,
     message: {
-      type: "cookiedip-browser-storage-browser-warmup",
-      normalizedUrl: options.normalizedUrl || "about:blank",
+      type: 'cookiedip-browser-storage-browser-warmup',
+      normalizedUrl: options.normalizedUrl || 'about:blank',
       options: {},
     },
     timeoutMs,
     timeoutMessage: `Puppeteer browser warmup timed out after ${timeoutMs}ms.`,
-    responseType: "cookiedip-browser-storage-browser-ready",
+    responseType: 'cookiedip-browser-storage-browser-ready',
   });
 }
 
-function sendBrowserWorkerRequest({
-  workerKey,
-  message,
-  timeoutMs,
-  timeoutMessage,
-  responseType,
-}) {
+function sendBrowserWorkerRequest({ workerKey, message, timeoutMs, timeoutMessage, responseType }) {
   const worker = getBrowserWorker(workerKey);
   const requestId = `${Date.now()}-${++nextWorkerRequestId}`;
 
@@ -86,7 +78,7 @@ function sendBrowserWorkerRequest({
 
 export async function closeBrowserStorageWorkers() {
   await Promise.allSettled(
-    [...browserWorkers.keys()].map((workerKey) => stopBrowserWorker(workerKey)),
+    [...browserWorkers.keys()].map((workerKey) => stopBrowserWorker(workerKey))
   );
 }
 
@@ -94,13 +86,13 @@ function getBrowserWorker(workerKey) {
   const existing = browserWorkers.get(workerKey);
   if (existing && existing.child.connected) return existing;
 
-  const workerPath = fileURLToPath(new URL("./browserWorker.js", import.meta.url));
+  const workerPath = fileURLToPath(new URL('./browserWorker.js', import.meta.url));
   const child = fork(workerPath, [], {
     env: {
       ...process.env,
       COOKIEDIP_BROWSER_WORKER_KEY: workerKey,
     },
-    stdio: ["ignore", "inherit", "inherit", "ipc"],
+    stdio: ['ignore', 'inherit', 'inherit', 'ipc'],
   });
   const worker = {
     child,
@@ -108,7 +100,7 @@ function getBrowserWorker(workerKey) {
   };
   browserWorkers.set(workerKey, worker);
 
-  child.on("message", (message) => {
+  child.on('message', (message) => {
     const pending = worker.pending.get(message.requestId);
     if (!pending) return;
     if (message?.type !== pending.responseType) return;
@@ -124,17 +116,17 @@ function getBrowserWorker(workerKey) {
     pending.reject(new Error(browserWorkerErrorMessage(message)));
   });
 
-  child.once("error", (error) => {
+  child.once('error', (error) => {
     rejectPendingWorkerRequests(worker, error);
     browserWorkers.delete(workerKey);
   });
 
-  child.once("exit", (code, signal) => {
+  child.once('exit', (code, signal) => {
     browserWorkers.delete(workerKey);
     const reason = signal ? `signal ${signal}` : `code ${code}`;
     rejectPendingWorkerRequests(
       worker,
-      new Error(`Browser worker exited before returning a result: ${reason}.`),
+      new Error(`Browser worker exited before returning a result: ${reason}.`)
     );
   });
 
@@ -148,25 +140,23 @@ function stopBrowserWorker(workerKey) {
 
   return new Promise((resolve) => {
     const timeout = setTimeout(() => {
-      console.error(
-        `Cookiedip browser worker killed workerKey=${workerKey} signal=SIGKILL`,
-      );
-      worker.child.kill("SIGKILL");
+      console.error(`Cookiedip browser worker killed workerKey=${workerKey} signal=SIGKILL`);
+      worker.child.kill('SIGKILL');
       resolve();
     }, 5000);
     timeout.unref?.();
 
-    worker.child.once("exit", () => {
+    worker.child.once('exit', () => {
       clearTimeout(timeout);
       resolve();
     });
 
     if (worker.child.connected) {
-      worker.child.send({ type: "cookiedip-browser-storage-scan-shutdown" });
+      worker.child.send({ type: 'cookiedip-browser-storage-scan-shutdown' });
       return;
     }
 
-    worker.child.kill("SIGTERM");
+    worker.child.kill('SIGTERM');
   });
 }
 
@@ -179,27 +169,25 @@ function rejectPendingWorkerRequests(worker, error) {
 }
 
 function browserWorkerKey(options) {
-  return String(options.browserWorkerKey || options.region || "default");
+  return String(options.browserWorkerKey || options.region || 'default');
 }
 
 function browserWorkerErrorMessage(message) {
-  if (typeof message?.error === "string" && message.error.trim()) {
+  if (typeof message?.error === 'string' && message.error.trim()) {
     return message.error.trim();
   }
 
   try {
     return `Browser worker failed without an error message: ${JSON.stringify(message)}`;
   } catch {
-    return "Browser worker failed without an error message.";
+    return 'Browser worker failed without an error message.';
   }
 }
 
 export async function runBrowserStorageScan(submittedUrl, options = {}) {
   const normalizedUrl = resolveNormalizedUrl(submittedUrl, options);
-  const captureWindowMs =
-    options.captureWindowMs ?? DEFAULT_CAPTURE_WINDOW_MS;
-  const navigationTimeoutMs =
-    options.navigationTimeoutMs ?? DEFAULT_NAVIGATION_TIMEOUT_MS;
+  const captureWindowMs = options.captureWindowMs ?? DEFAULT_CAPTURE_WINDOW_MS;
+  const navigationTimeoutMs = options.navigationTimeoutMs ?? DEFAULT_NAVIGATION_TIMEOUT_MS;
   const scanTimeoutMs = options.scanTimeoutMs ?? DEFAULT_SCAN_TIMEOUT_MS;
   const logger = options.logger ?? console;
   const browserSettings = resolveBrowserSettings(options);
@@ -224,7 +212,7 @@ export async function runBrowserStorageScan(submittedUrl, options = {}) {
     if (browser) {
       logInfo(
         logger,
-        `Reusing Puppeteer browser url=${normalizedUrl} navigationTimeoutMs=${navigationTimeoutMs} captureWindowMs=${captureWindowMs}`,
+        `Reusing Puppeteer browser url=${normalizedUrl} navigationTimeoutMs=${navigationTimeoutMs} captureWindowMs=${captureWindowMs}`
       );
     } else {
       browser = await launchBrowserForStorageScan({
@@ -260,15 +248,11 @@ export async function runBrowserStorageScan(submittedUrl, options = {}) {
         } catch {}
       });
       await installStorageHook(page, events, browserStartedAtEpochMs);
-      cdpDetach = await installCdpDomStorageMonitor(
-        page,
-        events,
-        browserStartedAtEpochMs,
-      );
+      cdpDetach = await installCdpDomStorageMonitor(page, events, browserStartedAtEpochMs);
       setupNetworkMonitor(page, events, browserStartedAtEpochMs);
 
       await page.goto(normalizedUrl, {
-        waitUntil: "load",
+        waitUntil: 'load',
         timeout: navigationTimeoutMs,
       });
 
@@ -276,7 +260,7 @@ export async function runBrowserStorageScan(submittedUrl, options = {}) {
       validatePublicUrl(normalizeUrl(finalUrl));
       logInfo(
         logger,
-        `Puppeteer navigation completed url=${normalizedUrl} finalUrl=${finalUrl} elapsedMs=${Math.round(performance.now() - browserStartedAt)}`,
+        `Puppeteer navigation completed url=${normalizedUrl} finalUrl=${finalUrl} elapsedMs=${Math.round(performance.now() - browserStartedAt)}`
       );
 
       await delay(captureWindowMs);
@@ -286,7 +270,7 @@ export async function runBrowserStorageScan(submittedUrl, options = {}) {
       const lastEventDetectedInRun = getLastEventDetectedInRun(events);
       logInfo(
         logger,
-        `Puppeteer scan completed url=${normalizedUrl} finalUrl=${finalUrl} durationMs=${browserDuration} items=${items.length} events=${events.length}`,
+        `Puppeteer scan completed url=${normalizedUrl} finalUrl=${finalUrl} durationMs=${browserDuration} items=${items.length} events=${events.length}`
       );
 
       return {
@@ -311,7 +295,7 @@ export async function runBrowserStorageScan(submittedUrl, options = {}) {
       await browser.close().catch(() => {});
       logInfo(
         logger,
-        `Puppeteer browser closed url=${normalizedUrl} elapsedMs=${Math.round(performance.now() - browserStartedAt)}`,
+        `Puppeteer browser closed url=${normalizedUrl} elapsedMs=${Math.round(performance.now() - browserStartedAt)}`
       );
     }
   }
@@ -319,21 +303,21 @@ export async function runBrowserStorageScan(submittedUrl, options = {}) {
 
 export function killPuppeteerBrowserProcess(
   browser,
-  { logger = console, normalizedUrl = "unknown", scanTimeoutMs = 0 } = {},
+  { logger = console, normalizedUrl = 'unknown', scanTimeoutMs = 0 } = {}
 ) {
   const process = browser?.process?.();
   if (!process) {
     logError(
       logger,
-      `Puppeteer scan timed out url=${normalizedUrl} scanTimeoutMs=${scanTimeoutMs}; no browser process was available to kill`,
+      `Puppeteer scan timed out url=${normalizedUrl} scanTimeoutMs=${scanTimeoutMs}; no browser process was available to kill`
     );
     return false;
   }
 
-  const killed = process.kill("SIGKILL");
+  const killed = process.kill('SIGKILL');
   logError(
     logger,
-    `Puppeteer browser killed url=${normalizedUrl} scanTimeoutMs=${scanTimeoutMs} signal=SIGKILL killed=${killed}`,
+    `Puppeteer browser killed url=${normalizedUrl} scanTimeoutMs=${scanTimeoutMs} signal=SIGKILL killed=${killed}`
   );
   return killed;
 }
@@ -341,46 +325,39 @@ export function killPuppeteerBrowserProcess(
 export async function launchBrowserForStorageScan({
   logger = console,
   startedAt = performance.now(),
-  normalizedUrl = "about:blank",
+  normalizedUrl = 'about:blank',
   executablePath,
   puppeteerArgs,
 } = {}) {
-  const resolvedExecutablePath = resolvePuppeteerExecutablePath(
-    process.env,
-    executablePath,
-  );
+  const resolvedExecutablePath = resolvePuppeteerExecutablePath(process.env, executablePath);
   if (!resolvedExecutablePath && process.env.PUPPETEER_EXECUTABLE_PATH) {
     delete process.env.PUPPETEER_EXECUTABLE_PATH;
   }
-  const { default: puppeteer } = await import("puppeteer");
+  const { default: puppeteer } = await import('puppeteer');
 
   logInfo(
     logger,
-    `Starting Puppeteer browser executable=${resolvedExecutablePath || "bundled"} url=${normalizedUrl}`,
+    `Starting Puppeteer browser executable=${resolvedExecutablePath || 'bundled'} url=${normalizedUrl}`
   );
 
   const browser = await puppeteer.launch(
     puppeteerLaunchOptions({
       executablePath: resolvedExecutablePath,
       puppeteerArgs,
-    }),
+    })
   );
 
   logInfo(
     logger,
-    `Puppeteer browser launched url=${normalizedUrl} elapsedMs=${Math.round(performance.now() - startedAt)}`,
+    `Puppeteer browser launched url=${normalizedUrl} elapsedMs=${Math.round(performance.now() - startedAt)}`
   );
 
   return browser;
 }
 
-export function puppeteerLaunchOptions({
-  executablePath,
-  env = process.env,
-  puppeteerArgs,
-} = {}) {
+export function puppeteerLaunchOptions({ executablePath, env = process.env, puppeteerArgs } = {}) {
   return {
-    headless: "new",
+    headless: 'new',
     executablePath,
     args: puppeteerLaunchArgs(env, puppeteerArgs),
     protocolTimeout: Number(env.PUPPETEER_PROTOCOL_TIMEOUT_MS || 300000),
@@ -388,46 +365,40 @@ export function puppeteerLaunchOptions({
 }
 
 function logInfo(logger, message) {
-  if (typeof logger?.info === "function") {
+  if (typeof logger?.info === 'function') {
     logger.info(message);
   }
 }
 
 function logError(logger, message) {
-  if (typeof logger?.error === "function") {
+  if (typeof logger?.error === 'function') {
     logger.error(message);
   }
 }
 
 export function puppeteerLaunchArgs(env = process.env, puppeteerArgs) {
   const baseArgs = [
-    "--no-sandbox",
-    "--disable-setuid-sandbox",
-    "--disable-dev-shm-usage",
-    "--disable-gpu",
-    "--no-zygote",
+    '--no-sandbox',
+    '--disable-setuid-sandbox',
+    '--disable-dev-shm-usage',
+    '--disable-gpu',
+    '--no-zygote',
   ];
 
-  if ((env.PUPPETEER_SINGLE_PROCESS || "1") === "1") {
-    baseArgs.push("--single-process");
+  if ((env.PUPPETEER_SINGLE_PROCESS || '1') === '1') {
+    baseArgs.push('--single-process');
   }
 
   const configuredArgs = Array.isArray(puppeteerArgs)
     ? puppeteerArgs
-    : typeof env.PUPPETEER_EXTRA_ARGS === "string"
+    : typeof env.PUPPETEER_EXTRA_ARGS === 'string'
       ? env.PUPPETEER_EXTRA_ARGS.split(/\s+/)
       : [];
 
-  return [
-    ...baseArgs,
-    ...configuredArgs.map((arg) => String(arg).trim()).filter(Boolean),
-  ];
+  return [...baseArgs, ...configuredArgs.map((arg) => String(arg).trim()).filter(Boolean)];
 }
 
-export function resolvePuppeteerExecutablePath(
-  env = process.env,
-  configuredPath,
-) {
+export function resolvePuppeteerExecutablePath(env = process.env, configuredPath) {
   if (configuredPath && existsSync(configuredPath)) return configuredPath;
 
   const executablePath = env.PUPPETEER_EXECUTABLE_PATH;
@@ -442,23 +413,18 @@ export function resolvePuppeteerExecutablePath(
 
 function puppeteerExecutableFallbacks(env) {
   if (env.PUPPETEER_FALLBACK_EXECUTABLE_PATHS !== undefined) {
-    return env.PUPPETEER_FALLBACK_EXECUTABLE_PATHS
-      .split(":")
+    return env.PUPPETEER_FALLBACK_EXECUTABLE_PATHS.split(':')
       .map((value) => value.trim())
       .filter(Boolean);
   }
 
-  return [
-    "/usr/bin/chromium",
-    "/usr/bin/chromium-browser",
-    "/usr/bin/google-chrome-stable",
-  ];
+  return ['/usr/bin/chromium', '/usr/bin/chromium-browser', '/usr/bin/google-chrome-stable'];
 }
 
 export function normalizeUrl(rawUrl) {
-  const trimmed = String(rawUrl || "").trim();
+  const trimmed = String(rawUrl || '').trim();
   if (!trimmed) {
-    throw new Error("URL is required.");
+    throw new Error('URL is required.');
   }
 
   try {
@@ -467,33 +433,33 @@ export function normalizeUrl(rawUrl) {
     if (!/^https?:\/\//i.test(trimmed)) {
       return new URL(`https://${trimmed}`);
     }
-    throw new Error("Unable to parse URL.");
+    throw new Error('Unable to parse URL.');
   }
 }
 
 export function validatePublicUrl(url) {
-  if (url.protocol !== "http:" && url.protocol !== "https:") {
-    throw new Error("Only HTTP and HTTPS URLs are supported.");
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    throw new Error('Only HTTP and HTTPS URLs are supported.');
   }
 
   const hostname = url.hostname.toLowerCase();
   if (
-    hostname === "localhost" ||
-    hostname.endsWith(".localhost") ||
-    hostname === "0.0.0.0" ||
-    hostname === "::1" ||
-    hostname.startsWith("127.")
+    hostname === 'localhost' ||
+    hostname.endsWith('.localhost') ||
+    hostname === '0.0.0.0' ||
+    hostname === '::1' ||
+    hostname.startsWith('127.')
   ) {
-    throw new Error("Localhost and loopback URLs are not allowed.");
+    throw new Error('Localhost and loopback URLs are not allowed.');
   }
 
   if (isPrivateIpv4(hostname)) {
-    throw new Error("Private network URLs are not allowed.");
+    throw new Error('Private network URLs are not allowed.');
   }
 }
 
 function resolveNormalizedUrl(submittedUrl, options) {
-  if (typeof options.normalizedUrl === "string" && options.normalizedUrl) {
+  if (typeof options.normalizedUrl === 'string' && options.normalizedUrl) {
     return options.normalizedUrl;
   }
 
@@ -503,17 +469,13 @@ function resolveNormalizedUrl(submittedUrl, options) {
 }
 
 function resolveBrowserSettings(options) {
-  const viewport = normalizeViewport(
-    options.viewport || options.browserSettings?.viewport,
-  );
+  const viewport = normalizeViewport(options.viewport || options.browserSettings?.viewport);
 
   return {
-    executablePath:
-      options.executablePath || options.browserSettings?.executablePath,
+    executablePath: options.executablePath || options.browserSettings?.executablePath,
     locale: options.locale || options.browserSettings?.locale,
     timezone: options.timezone || options.browserSettings?.timezone,
-    puppeteerArgs:
-      options.puppeteerArgs || options.browserSettings?.puppeteerArgs || [],
+    puppeteerArgs: options.puppeteerArgs || options.browserSettings?.puppeteerArgs || [],
     userAgent: options.userAgent || options.browserSettings?.userAgent || DEFAULT_USER_AGENT,
     viewport,
   };
@@ -533,20 +495,20 @@ function normalizeViewport(viewport) {
     };
   }
 
-  throw new Error("Viewport must include positive integer width and height values.");
+  throw new Error('Viewport must include positive integer width and height values.');
 }
 
 async function applyBrowserSettings(page, browserSettings) {
   if (browserSettings.locale) {
     await page.setExtraHTTPHeaders({
-      "Accept-Language": browserSettings.locale,
+      'Accept-Language': browserSettings.locale,
     });
   }
 
   if (browserSettings.timezone) {
     const client = await page.createCDPSession();
     try {
-      await client.send("Emulation.setTimezoneOverride", {
+      await client.send('Emulation.setTimezoneOverride', {
         timezoneId: browserSettings.timezone,
       });
     } finally {
@@ -556,18 +518,17 @@ async function applyBrowserSettings(page, browserSettings) {
 }
 
 async function installStorageHook(page, events, browserStartedAtEpochMs) {
-  await page.exposeFunction("__cookiedipRecordStorageEvent", (event) => {
+  await page.exposeFunction('__cookiedipRecordStorageEvent', (event) => {
     if (!isStorageEvent(event)) return;
     events.push(event);
   });
 
   await page.evaluateOnNewDocument((scanStartedAtEpochMs) => {
-    const observedAt = () =>
-      Math.max(0, Math.round(Date.now() - scanStartedAtEpochMs));
+    const observedAt = () => Math.max(0, Math.round(Date.now() - scanStartedAtEpochMs));
 
     const record = (event) => {
       const recorder = window.__cookiedipRecordStorageEvent;
-      if (typeof recorder === "function") {
+      if (typeof recorder === 'function') {
         try {
           recorder(event);
         } catch {}
@@ -575,8 +536,8 @@ async function installStorageHook(page, events, browserStartedAtEpochMs) {
     };
 
     const storageTypeFor = (storageArea) => {
-      if (storageArea === window.localStorage) return "localStorage";
-      if (storageArea === window.sessionStorage) return "sessionStorage";
+      if (storageArea === window.localStorage) return 'localStorage';
+      if (storageArea === window.sessionStorage) return 'sessionStorage';
       return null;
     };
 
@@ -591,8 +552,8 @@ async function installStorageHook(page, events, browserStartedAtEpochMs) {
           origin: window.location.origin,
           storageType,
           name: String(key),
-          action: "set",
-          evidenceSource: "js-monkeypatch-intercept",
+          action: 'set',
+          evidenceSource: 'js-monkeypatch-intercept',
           observedAt: observedAt(),
         });
       }
@@ -607,8 +568,8 @@ async function installStorageHook(page, events, browserStartedAtEpochMs) {
           origin: window.location.origin,
           storageType,
           name: String(key),
-          action: "remove",
-          evidenceSource: "js-monkeypatch-intercept",
+          action: 'remove',
+          evidenceSource: 'js-monkeypatch-intercept',
           observedAt: observedAt(),
         });
       }
@@ -622,9 +583,9 @@ async function installStorageHook(page, events, browserStartedAtEpochMs) {
         record({
           origin: window.location.origin,
           storageType,
-          name: "*",
-          action: "clear",
-          evidenceSource: "js-monkeypatch-intercept",
+          name: '*',
+          action: 'clear',
+          evidenceSource: 'js-monkeypatch-intercept',
           observedAt: observedAt(),
         });
       }
@@ -633,24 +594,24 @@ async function installStorageHook(page, events, browserStartedAtEpochMs) {
     };
 
     const cookieDescriptor =
-      Object.getOwnPropertyDescriptor(Document.prototype, "cookie") ||
-      Object.getOwnPropertyDescriptor(HTMLDocument.prototype, "cookie");
+      Object.getOwnPropertyDescriptor(Document.prototype, 'cookie') ||
+      Object.getOwnPropertyDescriptor(HTMLDocument.prototype, 'cookie');
 
     if (cookieDescriptor?.get && cookieDescriptor?.set) {
-      Object.defineProperty(document, "cookie", {
+      Object.defineProperty(document, 'cookie', {
         configurable: true,
         get() {
           return cookieDescriptor.get?.call(document);
         },
         set(value) {
-          const cookieName = String(value).split("=")[0]?.trim();
+          const cookieName = String(value).split('=')[0]?.trim();
           if (cookieName) {
             record({
               origin: window.location.origin,
-              storageType: "cookies",
+              storageType: 'cookies',
               name: cookieName,
-              action: isCookieUnset(String(value)) ? "remove" : "set",
-              evidenceSource: "js-monkeypatch-intercept",
+              action: isCookieUnset(String(value)) ? 'remove' : 'set',
+              evidenceSource: 'js-monkeypatch-intercept',
               observedAt: observedAt(),
             });
           }
@@ -668,19 +629,16 @@ async function installCdpDomStorageMonitor(page, events, browserStartedAtEpochMs
   const clients = new Set();
 
   const recordCdpEvent = (storageId, name, action) => {
-    if (
-      typeof storageId.securityOrigin !== "string" ||
-      typeof name !== "string"
-    ) {
+    if (typeof storageId.securityOrigin !== 'string' || typeof name !== 'string') {
       return;
     }
 
     events.push({
       origin: storageId.securityOrigin,
-      storageType: storageId.isLocalStorage ? "localStorage" : "sessionStorage",
+      storageType: storageId.isLocalStorage ? 'localStorage' : 'sessionStorage',
       name,
       action,
-      evidenceSource: "cdp-storage-intercept",
+      evidenceSource: 'cdp-storage-intercept',
       observedAt: relativeTimestamp(browserStartedAtEpochMs),
     });
   };
@@ -694,23 +652,23 @@ async function installCdpDomStorageMonitor(page, events, browserStartedAtEpochMs
 
     try {
       const client = await target.createCDPSession();
-      await client.send("DOMStorage.enable");
+      await client.send('DOMStorage.enable');
       clients.add(client);
 
-      client.on("DOMStorage.domStorageItemAdded", (event) => {
-        recordCdpEvent(event.storageId, event.key, "set");
+      client.on('DOMStorage.domStorageItemAdded', (event) => {
+        recordCdpEvent(event.storageId, event.key, 'set');
       });
 
-      client.on("DOMStorage.domStorageItemUpdated", (event) => {
-        recordCdpEvent(event.storageId, event.key, "set");
+      client.on('DOMStorage.domStorageItemUpdated', (event) => {
+        recordCdpEvent(event.storageId, event.key, 'set');
       });
 
-      client.on("DOMStorage.domStorageItemRemoved", (event) => {
-        recordCdpEvent(event.storageId, event.key, "remove");
+      client.on('DOMStorage.domStorageItemRemoved', (event) => {
+        recordCdpEvent(event.storageId, event.key, 'remove');
       });
 
-      client.on("DOMStorage.domStorageItemsCleared", (event) => {
-        recordCdpEvent(event.storageId, "*", "clear");
+      client.on('DOMStorage.domStorageItemsCleared', (event) => {
+        recordCdpEvent(event.storageId, '*', 'clear');
       });
     } catch {}
   };
@@ -719,11 +677,11 @@ async function installCdpDomStorageMonitor(page, events, browserStartedAtEpochMs
     attachTarget(target).catch(() => {});
   };
 
-  browser.on("targetcreated", handleTargetCreated);
+  browser.on('targetcreated', handleTargetCreated);
   await Promise.all(browser.targets().map((target) => attachTarget(target)));
 
   return () => {
-    browser.off("targetcreated", handleTargetCreated);
+    browser.off('targetcreated', handleTargetCreated);
     clients.forEach((client) => {
       client.detach().catch(() => {});
     });
@@ -731,33 +689,50 @@ async function installCdpDomStorageMonitor(page, events, browserStartedAtEpochMs
 }
 
 function isDomStorageTarget(target) {
-  return target.type() === "page" || target.type() === "iframe";
+  return target.type() === 'page' || target.type() === 'iframe';
 }
 
 function setupNetworkMonitor(page, events, browserStartedAtEpochMs) {
-  page.on("response", async (response) => {
+  page.on('response', async (response) => {
     try {
       const headers = response.headers();
-      const setCookieHeader = headers["set-cookie"];
+      const setCookieHeader = headers['set-cookie'];
       if (!setCookieHeader) return;
 
-      const origin = getUrlOrigin(response.url());
-      if (!origin) return;
-
-      parseSetCookieHeader(setCookieHeader).forEach((cookieString) => {
-        const cookieName = cookieString.trim().match(/^([^=;\s]+)=/)?.[1];
-        if (!cookieName) return;
-
-        events.push({
-          origin,
-          storageType: "cookies",
-          name: cookieName,
-          action: isCookieUnset(cookieString) ? "remove" : "set",
-          evidenceSource: "cookie-header",
-          observedAt: relativeTimestamp(browserStartedAtEpochMs),
-        });
-      });
+      events.push(
+        ...cookieHeaderEvents(
+          response.url(),
+          setCookieHeader,
+          relativeTimestamp(browserStartedAtEpochMs)
+        )
+      );
     } catch {}
+  });
+}
+
+export function cookieHeaderEvents(responseUrl, setCookieHeader, observedAt) {
+  const origin = getUrlOrigin(responseUrl);
+  if (!origin || typeof setCookieHeader !== 'string' || !setCookieHeader.trim()) {
+    return [];
+  }
+
+  const redactedSetCookieHeader = redactSetCookieHeader(setCookieHeader);
+
+  return parseSetCookieHeader(setCookieHeader).flatMap((cookieString) => {
+    const cookieName = cookieString.trim().match(/^([^=;\s]+)=/)?.[1];
+    if (!cookieName) return [];
+
+    return [
+      {
+        origin,
+        storageType: 'cookies',
+        name: cookieName,
+        action: isCookieUnset(cookieString) ? 'remove' : 'set',
+        evidenceSource: 'cookie-header',
+        setCookieHeader: redactedSetCookieHeader,
+        observedAt,
+      },
+    ];
   });
 }
 
@@ -773,7 +748,7 @@ function buildItems(events) {
       origin,
       storageType,
       name,
-      lastKnownState: "absent",
+      lastKnownState: 'absent',
       evidenceSources: [],
     };
     candidates.set(key, item);
@@ -781,7 +756,7 @@ function buildItems(events) {
   };
 
   events.forEach((event) => {
-    if (event.name === "*") return;
+    if (event.name === '*') return;
     const item = ensureItem(event.origin, event.storageType, event.name);
     updateLastKnownState(item, event);
     addEvidenceSource(item, event.evidenceSource);
@@ -791,8 +766,8 @@ function buildItems(events) {
     .map(({ lastObservedAt, ...item }) => item)
     .sort((a, b) =>
       `${a.origin}:${a.storageType}:${a.name}`.localeCompare(
-        `${b.origin}:${b.storageType}:${b.name}`,
-      ),
+        `${b.origin}:${b.storageType}:${b.name}`
+      )
     );
 }
 
@@ -809,7 +784,7 @@ function updateLastKnownState(item, event) {
     !Number.isFinite(currentObservedAt) ||
     observedAt >= currentObservedAt
   ) {
-    item.lastKnownState = event.action === "set" ? "present" : "absent";
+    item.lastKnownState = event.action === 'set' ? 'present' : 'absent';
     item.lastObservedAt = event.observedAt;
   }
 }
@@ -823,14 +798,14 @@ function getLastEventDetectedInRun(events) {
       return;
     }
 
-    if (event.action === "clear") {
+    if (event.action === 'clear') {
       lastEventDetectedInRun = event.observedAt;
       return;
     }
 
     const key = `${event.origin}\u0000${event.storageType}\u0000${event.name}`;
-    const currentState = stateByKey.get(key) || "absent";
-    const nextState = event.action === "set" ? "present" : "absent";
+    const currentState = stateByKey.get(key) || 'absent';
+    const nextState = event.action === 'set' ? 'present' : 'absent';
 
     if (currentState !== nextState) {
       stateByKey.set(key, nextState);
@@ -842,7 +817,7 @@ function getLastEventDetectedInRun(events) {
 }
 
 function isPrivateIpv4(hostname) {
-  const parts = hostname.split(".").map((part) => Number(part));
+  const parts = hostname.split('.').map((part) => Number(part));
   if (
     parts.length !== 4 ||
     parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)
@@ -861,14 +836,22 @@ function isPrivateIpv4(hostname) {
 
 function parseSetCookieHeader(header) {
   return header
-    .split(/,(?=\s*[^=;\s]+=)/)
+    .split(/\r?\n|,(?=\s*[^=;\s]+=)/)
     .map((part) => part.trim())
     .filter(Boolean);
 }
 
+export function redactSetCookieHeader(header) {
+  if (typeof header !== 'string') return '';
+
+  return parseSetCookieHeader(header)
+    .map((cookieString) => cookieString.replace(/^(\s*[^=;\s]+\s*=)[^;]*/, '$1[redacted]'))
+    .join(', ');
+}
+
 function isCookieUnset(cookieValue) {
   return /(?:max-age\s*=\s*0)|(?:expires\s*=\s*[^;]*(1970|Thu, 01 Jan 1970|01 Jan 1970))/i.test(
-    cookieValue,
+    cookieValue
   );
 }
 
@@ -891,34 +874,32 @@ function addEvidenceSource(item, evidenceSource) {
 }
 
 function isStorageEvent(value) {
-  if (!value || typeof value !== "object") return false;
+  if (!value || typeof value !== 'object') return false;
   return (
-    typeof value.origin === "string" &&
+    typeof value.origin === 'string' &&
     isStorageType(value.storageType) &&
-    typeof value.name === "string" &&
+    typeof value.name === 'string' &&
     isStorageAction(value.action) &&
     isEvidenceSource(value.evidenceSource) &&
+    (value.evidenceSource !== 'cookie-header' ||
+      (typeof value.setCookieHeader === 'string' && Boolean(value.setCookieHeader.trim()))) &&
     Number.isFinite(value.observedAt)
   );
 }
 
 function isStorageType(value) {
-  return (
-    value === "cookies" ||
-    value === "localStorage" ||
-    value === "sessionStorage"
-  );
+  return value === 'cookies' || value === 'localStorage' || value === 'sessionStorage';
 }
 
 function isStorageAction(value) {
-  return value === "set" || value === "remove" || value === "clear";
+  return value === 'set' || value === 'remove' || value === 'clear';
 }
 
 function isEvidenceSource(value) {
   return (
-    value === "js-monkeypatch-intercept" ||
-    value === "cdp-storage-intercept" ||
-    value === "cookie-header"
+    value === 'js-monkeypatch-intercept' ||
+    value === 'cdp-storage-intercept' ||
+    value === 'cookie-header'
   );
 }
 
@@ -928,8 +909,8 @@ async function clearBrowserState(browser) {
     const client = await page.createCDPSession();
     try {
       await Promise.all([
-        client.send("Network.clearBrowserCookies"),
-        client.send("Network.clearBrowserCache"),
+        client.send('Network.clearBrowserCookies'),
+        client.send('Network.clearBrowserCache'),
       ]);
     } finally {
       await client.detach().catch(() => {});

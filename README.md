@@ -51,14 +51,14 @@ import {
   runBrowserStorageScanInWorker,
   validatePublicUrl,
   warmBrowserStorageWorker,
-} from "cookiedip";
+} from 'cookiedip';
 
-const result = await runBrowserStorageScan("https://example.com", {
+const result = await runBrowserStorageScan('https://example.com', {
   captureWindowMs: 5000,
   navigationTimeoutMs: 50000,
   scanTimeoutMs: 100000,
-  locale: "en-US",
-  timezone: "America/New_York",
+  locale: 'en-US',
+  timezone: 'America/New_York',
   viewport: { width: 1365, height: 768 },
 });
 ```
@@ -91,13 +91,14 @@ Cookiedip returns a single scan result object:
       "name": "session_id",
       "action": "set",
       "evidenceSource": "cookie-header",
+      "setCookieHeader": "session_id=[redacted]; Path=/; HttpOnly",
       "observedAt": 81
     }
   ]
 }
 ```
 
-Cookiedip intentionally excludes raw cookie values and raw storage values. It reports metadata about names, origins, observed state transitions, and the evidence source used to detect them.
+Cookiedip excludes raw `localStorage`, `sessionStorage`, and cookie values. Events detected from HTTP responses include the originating `Set-Cookie` header as `setCookieHeader`, with every cookie value replaced by `[redacted]` before the event is created; cookie names and attributes remain available for inspection. Other result fields report metadata about names, origins, observed state transitions, and the evidence source used to detect them.
 
 ## Security Notes
 
