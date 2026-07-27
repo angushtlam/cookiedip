@@ -34,67 +34,100 @@ npm install
 npx cookiedip https://example.com browserStorage
 ```
 
-or if installed globally:
+Supported options:
 
-```bash
-npm install -g .
-cookiedip https://example.com browserStorage
+- `--capture-window <ms>`
+- `--navigation-timeout <ms>`
+- `--scan-timeout <ms>`
+- `--locale <value>`
+- `--timezone <value>`
+- `--viewport <width>x<height>`
+- `--user-agent <value>`
+- `--executable-path <path>`
+- `--puppeteer-arg <value>` (repeatable)
+
+Removed in `1.0.0`:
+
+- `--poll-delay`
+- `--poll-times`
+
+Those flags belonged to the old polling-only implementation. The replacement scanner observes browser-storage activity through runtime instrumentation, CDP DOM storage events, and cookie headers instead.
+
+## Library API
+
+```js
+import {
+  closeBrowserStorageWorkers,
+  normalizeUrl,
+  runBrowserStorageScan,
+  runBrowserStorageScanInWorker,
+  validatePublicUrl,
+  warmBrowserStorageWorker,
+} from 'cookiedip';
+
+const result = await runBrowserStorageScan('https://example.com', {
+  captureWindowMs: 5000,
+  navigationTimeoutMs: 50000,
+  scanTimeoutMs: 100000,
+  locale: 'en-US',
+  timezone: 'America/New_York',
+  viewport: { width: 1365, height: 768 },
+});
 ```
 
-## Arguments
+## Result Shape
 
-| Argument | Required | Default | Description |
-| --- | --- | --- | --- |
-| `<url>` | Yes | None | Website URL to inspect. URLs without a protocol are treated as `https://` URLs. |
-| `[type]` | No | `browserStorage` | Output type to collect. Currently only `browserStorage` is supported. |
-| `--poll-delay <ms>` | No | `1000` | Delay in milliseconds between polling snapshots. |
-| `--poll-times <count>` | No | `5` | Number of polling snapshots to collect. |
-| `--help`, `-h` | No | None | Print CLI usage. |
-
-Example with polling options:
-
-```bash
-npx cookiedip --poll-delay 1000 --poll-times 5 https://example.com browserStorage
-```
-
-## Output
-
-For `browserStorage`, the CLI prints an object containing cookies, localStorage, sessionStorage, and network cookie set/unset activity.
-
-If a cookie is labeled as "set", it means the cookie is found on the page at the last check, and assumed to be loaded at the end of the page.
-
-If a cookie is labeled as "unset", it means the cookie was set at one point from the initial load, then deleted before the last check. Cookies that were set then unset are still considered to be used even if it was only for a fraction of a second.
-
-Example output:
+Cookiedip returns a single scan result object:
 
 ```json
 {
-  "browserStorage": {
-    "https://example.com": {
-      "cookies": {
-        "unset": {
-          "old_session": "network"
-        },
-        "set": {
-          "sessionid": "polling",
-          "analytics_id": "network"
-        }
-      },
-      "localStorage": {
-        "unset": {
-          "temporary_flag": "polling"
-        },
-        "set": {
-          "theme": "polling"
-        }
-      },
-      "sessionStorage": {
-        "unset": {},
-        "set": {
-          "tab_id": "polling"
-        }
-      }
+  "submittedUrl": "https://example.com",
+  "normalizedUrl": "https://example.com/",
+  "finalUrl": "https://example.com/",
+  "runTimestamp": "2026-06-30T12:00:00.000Z",
+  "browserDuration": 1421,
+  "lastEventDetectedInRun": 1294,
+  "items": [
+    {
+      "origin": "https://example.com",
+      "storageType": "cookies",
+      "name": "session_id",
+      "lastKnownState": "present",
+      "evidenceSources": ["cookie-header", "js-monkeypatch-intercept"]
     }
-  }
+  ],
+  "events": [
+    {
+      "origin": "https://example.com",
+      "storageType": "cookies",
+      "name": "session_id",
+      "action": "set",
+      "evidenceSource": "cookie-header",
+      "setCookieHeader": "session_id=[redacted]; Path=/; HttpOnly",
+      "observedAt": 81
+    }
+  ]
 }
+```
+
+Cookiedip excludes raw `localStorage`, `sessionStorage`, and cookie values. Events detected from HTTP responses include the originating `Set-Cookie` header as `setCookieHeader`, with every cookie value replaced by `[redacted]` before the event is created; cookie names and attributes remain available for inspection. Other result fields report metadata about names, origins, observed state transitions, and the evidence source used to detect them.
+
+## Security Notes
+
+- Cookiedip only accepts public `http:` and `https:` URLs. Loopback and RFC1918 IPv4 targets are rejected.
+- URL validation is not a replacement for network-level egress controls. If you run Cookiedip against untrusted input, isolate it appropriately.
+- Chromium runs with the same sandbox-safe defaults used by the Justicar scanner. Review those defaults before changing them for your own environment.
+
+## Worker Mode
+
+`runBrowserStorageScanInWorker` and `warmBrowserStorageWorker` let callers reuse a persistent browser in a child process. This is useful when you need repeated scans without paying Chromium startup cost each time.
+
+Always call `closeBrowserStorageWorkers()` during shutdown so the child browser processes exit cleanly.
+
+## Development
+
+```bash
+npm install
+npm test
+npm pack --dry-run
 ```
