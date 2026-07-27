@@ -1,34 +1,22 @@
 # Cookiedip
 
-Open source cookie identification inspired by tools used by privacy regulators.
-
-Privacy regulators around the world are investigating company websites for violations against user privacy rights. Violations that are not fixed promptly can result in fines and consent decrees against organizations. Here are some examples:
-
-- California https://oag.ca.gov/news/press-releases/attorney-general-bonta-announces-settlement-sephora-part-ongoing-enforcement
-- United Kingdom https://ico.org.uk/media2/migrated/4027811/cookie-banner-concerns.pdf
-- France https://www.edpb.europa.eu/news/national-news/2025/french-sa-cookies-and-advertisements-inserted-between-emails-google-fined_en
-
-# Features
-
-Cookiedip contains only one feature right now.
-
-- Cookies, local storage, and session storage identification in polling and network monitoring
-
-# Dependencies
-
-This library relies on [Puppeteer](https://github.com/puppeteer/puppeteer) and its supported browsers for its capabilities.
+Cookiedip is a reusable Puppeteer-based scanner for cookie, `localStorage`, and `sessionStorage` activity on public websites. It is the open-source extraction of the browser-storage collector used inside Justicar, with private queueing, VPN routing, persistence, and deployment logic left out.
 
 ## Installation
 
-1. Install dependencies:
-
 ```bash
-npm install
+npm install cookiedip
 ```
 
-2. You can run the CLI locally with `npx` or install it globally.
+Cookiedip requires Node.js 20 or newer and a Puppeteer-compatible Chromium runtime. By default it uses Puppeteer's bundled browser unless you provide `--executable-path` or `PUPPETEER_EXECUTABLE_PATH`.
 
-## Usage
+## CLI
+
+```bash
+npx cookiedip https://example.com
+```
+
+Optional compatibility form:
 
 ```bash
 npx cookiedip https://example.com browserStorage
