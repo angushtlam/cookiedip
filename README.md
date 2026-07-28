@@ -10,6 +10,10 @@ npm install cookiedip
 
 Cookiedip requires Node.js 20 or newer and a Puppeteer-compatible Chromium runtime. By default it uses Puppeteer's bundled browser unless you provide `--executable-path` or `PUPPETEER_EXECUTABLE_PATH`.
 
+Cookiedip uses its named user agent by default. Override it with `--user-agent`, `userAgent`, or `useBrowserUserAgent: true` for the installed browser's identity.
+
+Cookiedip also uses an `en-US` browser language profile, aligns screen and viewport metrics, and disables Chromium's direct automation indicators. Set `PUPPETEER_DISABLE_GPU=1` or `PUPPETEER_SINGLE_PROCESS=1` only when a constrained host requires those compatibility modes.
+
 ## CLI
 
 ```bash
@@ -60,8 +64,11 @@ const result = await runBrowserStorageScan('https://example.com', {
   locale: 'en-US',
   timezone: 'America/New_York',
   viewport: { width: 1365, height: 768 },
+  userAgent: 'MyScanner/1.0',
 });
 ```
+
+Omit `userAgent` to use the Cookiedip default.
 
 ## Result Shape
 
@@ -105,6 +112,7 @@ Cookiedip excludes raw `localStorage`, `sessionStorage`, and cookie values. Even
 - Cookiedip only accepts public `http:` and `https:` URLs. Loopback and RFC1918 IPv4 targets are rejected.
 - URL validation is not a replacement for network-level egress controls. If you run Cookiedip against untrusted input, isolate it appropriately.
 - Chromium runs with the same sandbox-safe defaults used by the Justicar scanner. Review those defaults before changing them for your own environment.
+- The browser profile reduces false negatives caused by simple headless-browser checks. It does not bypass CAPTCHAs, authentication, access controls, or IP/network reputation systems.
 
 ## Worker Mode
 

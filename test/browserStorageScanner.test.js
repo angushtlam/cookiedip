@@ -6,11 +6,16 @@ import test from 'node:test';
 
 import {
   cookieHeaderEvents,
+  createBrowserProfile,
+  DEFAULT_USER_AGENT,
   killPuppeteerBrowserProcess,
+  languagePreference,
+  localeLanguages,
   normalizeUrl,
   puppeteerLaunchArgs,
   puppeteerLaunchOptions,
   redactSetCookieHeader,
+  resolveBrowserUserAgent,
   resolvePuppeteerExecutablePath,
   validatePublicUrl,
 } from '../src/browserStorageScanner.js';
@@ -95,31 +100,102 @@ test('puppeteerLaunchArgs includes sandbox-safe Chromium flags and optional extr
     '--no-sandbox',
     '--disable-setuid-sandbox',
     '--disable-dev-shm-usage',
-    '--disable-gpu',
-    '--no-zygote',
-    '--single-process',
+    '--disable-blink-features=AutomationControlled',
+    '--window-size=1365,768',
   ]);
 
   assert.deepEqual(puppeteerLaunchArgs({}, ['--foo', '--bar']), [
     '--no-sandbox',
     '--disable-setuid-sandbox',
     '--disable-dev-shm-usage',
-    '--disable-gpu',
-    '--no-zygote',
-    '--single-process',
+    '--disable-blink-features=AutomationControlled',
+    '--window-size=1365,768',
     '--foo',
     '--bar',
   ]);
 });
 
-test('puppeteerLaunchOptions sets an extended protocol timeout', () => {
-  assert.equal(puppeteerLaunchOptions({ env: {} }).protocolTimeout, 300000);
+test('puppeteerLaunchOptions suppresses the automation switch and sets a protocol timeout', () => {
+  const options = puppeteerLaunchOptions({ env: {} });
+  assert.deepEqual(options.ignoreDefaultArgs, ['--enable-automation']);
+  assert.equal(options.protocolTimeout, 300000);
   assert.equal(
     puppeteerLaunchOptions({
       env: { PUPPETEER_PROTOCOL_TIMEOUT_MS: '450000' },
     }).protocolTimeout,
     450000
   );
+});
+
+test('createBrowserProfile removes the headless token and aligns client hints', () => {
+  assert.deepEqual(
+    createBrowserProfile({
+      browserUserAgent:
+        'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 HeadlessChrome/142.0.0.0 Safari/537.36',
+      browserVersion: 'Chrome/142.0.7444.175',
+      platform: 'Linux x86_64',
+      runtimeArchitecture: 'x64',
+      runtimePlatform: 'linux',
+      runtimeRelease: '6.8.0',
+      userAgentMetadata: {
+        brands: [
+          { brand: 'Not_A Brand', version: '99' },
+          { brand: 'Chromium', version: '142' },
+        ],
+        fullVersionList: [
+          { brand: 'Not_A Brand', version: '99.0.0.0' },
+          { brand: 'Chromium', version: '142.0.7444.59' },
+        ],
+        mobile: false,
+        platform: 'Linux',
+      },
+    }),
+    {
+      userAgent:
+        'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/142.0.0.0 Safari/537.36',
+      platform: 'Linux x86_64',
+      userAgentMetadata: {
+        brands: [
+          { brand: 'Not_A Brand', version: '99' },
+          { brand: 'Chromium', version: '142' },
+        ],
+        fullVersionList: [
+          { brand: 'Not_A Brand', version: '99.0.0.0' },
+          { brand: 'Chromium', version: '142.0.7444.175' },
+        ],
+        mobile: false,
+        platform: 'Linux',
+        platformVersion: '6.8.0',
+        architecture: 'x86',
+        model: '',
+        bitness: '64',
+        wow64: false,
+      },
+    }
+  );
+});
+
+test('locale helpers create consistent browser languages and request preferences', () => {
+  assert.deepEqual(localeLanguages('en-GB'), ['en-GB', 'en']);
+  assert.equal(languagePreference('en-GB'), 'en-GB,en;q=0.9');
+  assert.deepEqual(localeLanguages(), ['en-US', 'en']);
+});
+
+test('Cookiedip preserves its named default user agent', () => {
+  assert.equal(
+    DEFAULT_USER_AGENT,
+    'Mozilla/5.0 (compatible; Cookiedip/1.0; +https://github.com/angushtlam/cookiedip)'
+  );
+  assert.equal(resolveBrowserUserAgent(), DEFAULT_USER_AGENT);
+});
+
+test('Cookiedip resolves custom and installed-browser user agent options', () => {
+  assert.equal(resolveBrowserUserAgent({ userAgent: 'MyScanner/2.0' }), 'MyScanner/2.0');
+  assert.equal(
+    resolveBrowserUserAgent({ browserSettings: { userAgent: 'NestedScanner/3.0' } }),
+    'NestedScanner/3.0'
+  );
+  assert.equal(resolveBrowserUserAgent({ useBrowserUserAgent: true }), null);
 });
 
 test('killPuppeteerBrowserProcess logs when a browser process is killed', () => {
@@ -166,6 +242,14 @@ test('parseCommandLineArgs accepts the legacy browserStorage positional argument
       },
       url: 'https://example.com',
     }
+  );
+});
+
+test('parseCommandLineArgs accepts a custom user agent', () => {
+  assert.equal(
+    parseCommandLineArgs(['https://example.com', '--user-agent', 'MyScanner/2.0']).options
+      .userAgent,
+    'MyScanner/2.0'
   );
 });
 

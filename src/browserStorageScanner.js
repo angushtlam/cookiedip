@@ -1,10 +1,16 @@
 import { fork } from 'node:child_process';
 import { existsSync } from 'node:fs';
+import {
+  arch as systemArchitecture,
+  platform as systemPlatform,
+  release as systemRelease,
+} from 'node:os';
 import { fileURLToPath } from 'node:url';
 
 export const DEFAULT_CAPTURE_WINDOW_MS = 5000;
 export const DEFAULT_NAVIGATION_TIMEOUT_MS = 50000;
 export const DEFAULT_SCAN_TIMEOUT_MS = 100000;
+export const DEFAULT_LOCALE = 'en-US';
 export const DEFAULT_USER_AGENT =
   'Mozilla/5.0 (compatible; Cookiedip/1.0; +https://github.com/angushtlam/cookiedip)';
 const DEFAULT_VIEWPORT = { width: 1365, height: 768 };
@@ -237,7 +243,6 @@ export async function runBrowserStorageScan(submittedUrl, options = {}) {
       page.setDefaultTimeout(navigationTimeoutMs);
 
       await page.setViewport(browserSettings.viewport);
-      await page.setUserAgent(browserSettings.userAgent);
       await applyBrowserSettings(page, browserSettings);
       await page.evaluateOnNewDocument(() => {
         try {
@@ -360,6 +365,7 @@ export function puppeteerLaunchOptions({ executablePath, env = process.env, pupp
     headless: 'new',
     executablePath,
     args: puppeteerLaunchArgs(env, puppeteerArgs),
+    ignoreDefaultArgs: ['--enable-automation'],
     protocolTimeout: Number(env.PUPPETEER_PROTOCOL_TIMEOUT_MS || 300000),
   };
 }
@@ -381,12 +387,16 @@ export function puppeteerLaunchArgs(env = process.env, puppeteerArgs) {
     '--no-sandbox',
     '--disable-setuid-sandbox',
     '--disable-dev-shm-usage',
-    '--disable-gpu',
-    '--no-zygote',
+    '--disable-blink-features=AutomationControlled',
+    '--window-size=1365,768',
   ];
 
-  if ((env.PUPPETEER_SINGLE_PROCESS || '1') === '1') {
-    baseArgs.push('--single-process');
+  if (env.PUPPETEER_DISABLE_GPU === '1') {
+    baseArgs.push('--disable-gpu');
+  }
+
+  if (env.PUPPETEER_SINGLE_PROCESS === '1') {
+    baseArgs.push('--no-zygote', '--single-process');
   }
 
   const configuredArgs = Array.isArray(puppeteerArgs)
@@ -473,12 +483,20 @@ function resolveBrowserSettings(options) {
 
   return {
     executablePath: options.executablePath || options.browserSettings?.executablePath,
-    locale: options.locale || options.browserSettings?.locale,
+    locale: options.locale || options.browserSettings?.locale || DEFAULT_LOCALE,
     timezone: options.timezone || options.browserSettings?.timezone,
     puppeteerArgs: options.puppeteerArgs || options.browserSettings?.puppeteerArgs || [],
-    userAgent: options.userAgent || options.browserSettings?.userAgent || DEFAULT_USER_AGENT,
+    userAgent: resolveBrowserUserAgent(options),
     viewport,
   };
+}
+
+export function resolveBrowserUserAgent(options = {}) {
+  const useBrowserUserAgent =
+    options.useBrowserUserAgent ?? options.browserSettings?.useBrowserUserAgent ?? false;
+  return useBrowserUserAgent
+    ? null
+    : options.userAgent || options.browserSettings?.userAgent || DEFAULT_USER_AGENT;
 }
 
 function normalizeViewport(viewport) {
@@ -499,22 +517,229 @@ function normalizeViewport(viewport) {
 }
 
 async function applyBrowserSettings(page, browserSettings) {
-  if (browserSettings.locale) {
-    await page.setExtraHTTPHeaders({
-      'Accept-Language': browserSettings.locale,
-    });
-  }
+  const nativeProfile = await readNativeBrowserProfile(page);
+  const browserProfile = createBrowserProfile({
+    ...nativeProfile,
+    configuredUserAgent: browserSettings.userAgent,
+  });
 
-  if (browserSettings.timezone) {
-    const client = await page.createCDPSession();
-    try {
+  await page.setUserAgent(browserProfile);
+  await page.setExtraHTTPHeaders({
+    'Accept-Language': languagePreference(browserSettings.locale),
+  });
+  await page.evaluateOnNewDocument(
+    ({ languages, viewport }) => {
+      Object.defineProperties(Navigator.prototype, {
+        language: {
+          configurable: true,
+          get: () => languages[0],
+        },
+        languages: {
+          configurable: true,
+          get: () => Object.freeze([...languages]),
+        },
+      });
+
+      Object.defineProperties(Screen.prototype, {
+        width: {
+          configurable: true,
+          get: () => viewport.width,
+        },
+        height: {
+          configurable: true,
+          get: () => viewport.height,
+        },
+        availWidth: {
+          configurable: true,
+          get: () => viewport.width,
+        },
+        availHeight: {
+          configurable: true,
+          get: () => viewport.height,
+        },
+      });
+    },
+    {
+      languages: localeLanguages(browserSettings.locale),
+      viewport: browserSettings.viewport,
+    }
+  );
+
+  const client = await page.createCDPSession();
+  try {
+    await client.send('Emulation.setDeviceMetricsOverride', {
+      width: browserSettings.viewport.width,
+      height: browserSettings.viewport.height,
+      screenWidth: browserSettings.viewport.width,
+      screenHeight: browserSettings.viewport.height,
+      deviceScaleFactor: 1,
+      mobile: false,
+      screenOrientation: {
+        angle: 0,
+        type: 'portraitPrimary',
+      },
+    });
+
+    if (browserSettings.timezone) {
       await client.send('Emulation.setTimezoneOverride', {
         timezoneId: browserSettings.timezone,
       });
-    } finally {
-      await client.detach().catch(() => {});
     }
+  } finally {
+    await client.detach().catch(() => {});
   }
+}
+
+async function readNativeBrowserProfile(page) {
+  const [browserUserAgent, browserVersion, pageProfile] = await Promise.all([
+    page.browser().userAgent(),
+    page.browser().version(),
+    page.evaluate(async () => {
+      const userAgentData = navigator.userAgentData;
+      let metadata = null;
+
+      if (userAgentData) {
+        try {
+          metadata = await userAgentData.getHighEntropyValues([
+            'architecture',
+            'bitness',
+            'formFactors',
+            'fullVersionList',
+            'model',
+            'platformVersion',
+            'wow64',
+          ]);
+        } catch {
+          metadata = userAgentData.toJSON();
+        }
+      }
+
+      return {
+        platform: navigator.platform,
+        userAgentMetadata: metadata,
+      };
+    }),
+  ]);
+
+  return {
+    browserUserAgent,
+    browserVersion,
+    platform: pageProfile.platform,
+    userAgentMetadata: pageProfile.userAgentMetadata,
+  };
+}
+
+export function createBrowserProfile({
+  browserUserAgent,
+  browserVersion,
+  configuredUserAgent,
+  platform,
+  runtimeArchitecture = systemArchitecture(),
+  runtimePlatform = systemPlatform(),
+  runtimeRelease = systemRelease(),
+  userAgentMetadata,
+} = {}) {
+  const userAgent = String(configuredUserAgent || browserUserAgent || '').replace(
+    /HeadlessChrome\//g,
+    'Chrome/'
+  );
+  const configuredChromeVersion = configuredUserAgent?.match(
+    /(?:Chrome|Chromium)\/(\d+(?:\.\d+){0,3})/
+  )?.[1];
+  const chromeVersion =
+    configuredChromeVersion ||
+    browserVersion?.match(/(?:Chrome|Chromium)\/(\d+(?:\.\d+){0,3})/)?.[1] ||
+    userAgent.match(/(?:Chrome|Chromium)\/(\d+(?:\.\d+){0,3})/)?.[1];
+  const metadata = normalizeUserAgentMetadata(userAgentMetadata, chromeVersion, {
+    platform,
+    runtimeArchitecture,
+    runtimePlatform,
+    runtimeRelease,
+  });
+
+  return {
+    userAgent,
+    ...(metadata ? { userAgentMetadata: metadata } : {}),
+    ...(platform ? { platform } : {}),
+  };
+}
+
+function normalizeUserAgentMetadata(metadata, chromeVersion, runtime) {
+  if (!chromeVersion) return null;
+
+  const source = metadata && typeof metadata === 'object' ? metadata : {};
+  const majorVersion = chromeVersion?.split('.')[0];
+  const updateBrandVersions = (brands, fullVersion) => {
+    if (!Array.isArray(brands)) return brands;
+    return brands.map((brand) => {
+      if (!/Chromium|Chrome/i.test(brand.brand) || !chromeVersion) return brand;
+      return {
+        ...brand,
+        version: fullVersion ? chromeVersion : majorVersion,
+      };
+    });
+  };
+
+  const fallback = fallbackUserAgentMetadata(chromeVersion, runtime);
+
+  return {
+    ...fallback,
+    ...source,
+    brands: updateBrandVersions(source.brands || fallback.brands, false),
+    fullVersionList: updateBrandVersions(source.fullVersionList || fallback.fullVersionList, true),
+  };
+}
+
+function fallbackUserAgentMetadata(
+  chromeVersion,
+  { platform, runtimeArchitecture, runtimePlatform, runtimeRelease }
+) {
+  const majorVersion = chromeVersion.split('.')[0];
+  const chromiumBrands = [
+    { brand: 'Not_A Brand', version: '99' },
+    { brand: 'Chromium', version: majorVersion },
+  ];
+  const chromiumFullVersionList = [
+    { brand: 'Not_A Brand', version: '99.0.0.0' },
+    { brand: 'Chromium', version: chromeVersion },
+  ];
+
+  return {
+    brands: chromiumBrands,
+    fullVersionList: chromiumFullVersionList,
+    platform: userAgentDataPlatform(platform, runtimePlatform),
+    platformVersion: runtimePlatform === 'linux' ? runtimeRelease : '',
+    architecture: runtimeArchitecture.startsWith('arm') ? 'arm' : 'x86',
+    model: '',
+    mobile: false,
+    bitness: runtimeArchitecture.includes('64') ? '64' : '32',
+    wow64: false,
+  };
+}
+
+function userAgentDataPlatform(platform, runtimePlatform) {
+  if (/^Mac/i.test(platform)) return 'macOS';
+  if (/^Win/i.test(platform)) return 'Windows';
+  if (/Linux/i.test(platform)) return 'Linux';
+  if (runtimePlatform === 'darwin') return 'macOS';
+  if (runtimePlatform === 'win32') return 'Windows';
+  return 'Linux';
+}
+
+export function localeLanguages(locale = DEFAULT_LOCALE) {
+  const normalizedLocale = String(locale || DEFAULT_LOCALE).trim() || DEFAULT_LOCALE;
+  const baseLanguage = normalizedLocale.split('-')[0];
+  return baseLanguage && baseLanguage !== normalizedLocale
+    ? [normalizedLocale, baseLanguage]
+    : [normalizedLocale];
+}
+
+export function languagePreference(locale = DEFAULT_LOCALE) {
+  return localeLanguages(locale)
+    .map((language, index) =>
+      index === 0 ? language : `${language};q=${(1 - index / 10).toFixed(1)}`
+    )
+    .join(',');
 }
 
 async function installStorageHook(page, events, browserStartedAtEpochMs) {

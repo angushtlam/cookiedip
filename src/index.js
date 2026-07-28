@@ -1,9 +1,14 @@
 export {
   closeBrowserStorageWorkers,
+  createBrowserProfile,
   DEFAULT_CAPTURE_WINDOW_MS,
+  DEFAULT_LOCALE,
   DEFAULT_NAVIGATION_TIMEOUT_MS,
   DEFAULT_SCAN_TIMEOUT_MS,
+  DEFAULT_USER_AGENT,
   killPuppeteerBrowserProcess,
+  languagePreference,
+  localeLanguages,
   normalizeUrl,
   puppeteerLaunchArgs,
   puppeteerLaunchOptions,
@@ -12,5 +17,5 @@ export {
   runBrowserStorageScanInWorker,
   validatePublicUrl,
   warmBrowserStorageWorker,
-} from "./browserStorageScanner.js";
-export { startBrowserStorageWorker } from "./browserWorker.js";
+} from './browserStorageScanner.js';
+export { startBrowserStorageWorker } from './browserWorker.js';
